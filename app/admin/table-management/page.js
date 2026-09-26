@@ -20,26 +20,21 @@ export default function GenerateQRPage() {
     const tableNum = Number(tableNumber)
 
     try {
-      // 1. เช็กก่อนว่าโต๊ะนี้มี Session ที่เปิดใช้งาน (status = 'open') อยู่หรือเปล่า
-      const { data: existingSession, error: checkError } = await supabase
+      // 1. เช็กก่อนว่าโต๊ะนี้มี Session ที่ open อยู่ไหม
+      const { data: existingSession } = await supabase
         .from('sessions')
-        .select('id, status')
+        .select('id')
         .eq('table_number', tableNum)
         .eq('status', 'open')
         .maybeSingle()
 
-      if (checkError) {
-        console.error('Check session error:', checkError)
-      }
-
-      // 🔴 ถ้าพบว่าโต๊ะนี้เปิดค้างไม่อยู่ (status = 'open') ให้เด้งเตือนและหยุดการทำงานทันที
       if (existingSession) {
-        alert(`⚠️ โต๊ะ ${tableNum} มีลูกค้านั่งอยู่แล้ว! ไม่สามารถเปิดโต๊ะซ้ำได้ กรุณาปิดโต๊ะเดิมก่อนครับ`)
+        alert(`⚠️ โต๊ะ ${tableNum} กำลังมีลูกค้านั่งอยู่! กรุณาเช็กบิล/ปิดโต๊ะเดิมก่อนเปิดใหม่ครับ`)
         setLoading(false)
         return
       }
 
-      // 2. ถ้าโต๊ะว่างจริงๆ ค่อยสร้าง Token และเพิ่มลงตาราง sessions
+      // 2. ถ้าโต๊ะว่าง ค่อยสร้าง Token และ Insert
       const newToken = crypto.randomUUID()
 
       const { data: newSession, error: insertError } = await supabase
@@ -57,12 +52,17 @@ export default function GenerateQRPage() {
         .single()
 
       if (insertError) {
-        alert('เกิดข้อผิดพลาดในการเปิดโต๊ะ: ' + insertError.message)
+        // ดักจับ Error เปิดโต๊ะซ้ำจาก Supabase Constraint
+        if (insertError.code === '23505' || insertError.message.includes('unique_open_table_session')) {
+          alert(`⚠️ โต๊ะ ${tableNum} กำลังมีลูกค้านั่งอยู่! กรุณาเช็กบิล/ปิดโต๊ะเดิมก่อนเปิดใหม่ครับ`)
+        } else {
+          alert('เกิดข้อผิดพลาดในการเปิดโต๊ะ: ' + insertError.message)
+        }
         setLoading(false)
         return
       }
 
-      // 3. สร้าง URL สำหรับสั่งอาหาร
+      // 3. สร้าง URL ลิงก์สั่งอาหาร
       const baseUrl = window.location.origin
       const customerOrderUrl = `${baseUrl}/order/${tableNum}?token=${newToken}`
       setQrUrl(customerOrderUrl)
