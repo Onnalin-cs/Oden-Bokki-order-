@@ -20,10 +20,10 @@ export default function GenerateQRPage() {
     const tableNum = Number(tableNumber)
 
     try {
-      // 1. เช็กว่าโต๊ะนี้มี Session สถานะ 'open' อยู่แล้วหรือไม่
+      // 1. เช็กก่อนว่าโต๊ะนี้มี Session ที่เปิดใช้งาน (status = 'open') อยู่หรือเปล่า
       const { data: existingSession, error: checkError } = await supabase
         .from('sessions')
-        .select('id')
+        .select('id, status')
         .eq('table_number', tableNum)
         .eq('status', 'open')
         .maybeSingle()
@@ -32,14 +32,14 @@ export default function GenerateQRPage() {
         console.error('Check session error:', checkError)
       }
 
-      // ถ้าเจอว่าโต๊ะนี้ยังไม่ปิด Session -> ให้แจ้งเตือนและหยุดทันที
+      // 🔴 ถ้าพบว่าโต๊ะนี้เปิดค้างไม่อยู่ (status = 'open') ให้เด้งเตือนและหยุดการทำงานทันที
       if (existingSession) {
-        alert(`⚠️ โต๊ะ ${tableNum} กำลังมีลูกค้าใช้งานอยู่! กรุณาปิดโต๊ะเดิมก่อนเปิดใหม่ครับ`)
+        alert(`⚠️ โต๊ะ ${tableNum} มีลูกค้านั่งอยู่แล้ว! ไม่สามารถเปิดโต๊ะซ้ำได้ กรุณาปิดโต๊ะเดิมก่อนครับ`)
         setLoading(false)
         return
       }
 
-      // 2. ถ้าโต๊ะว่าง -> สร้าง Token ใหม่และบันทึก Session
+      // 2. ถ้าโต๊ะว่างจริงๆ ค่อยสร้าง Token และเพิ่มลงตาราง sessions
       const newToken = crypto.randomUUID()
 
       const { data: newSession, error: insertError } = await supabase
@@ -62,7 +62,7 @@ export default function GenerateQRPage() {
         return
       }
 
-      // 3. สร้าง URL สำหรับสร้าง QR Code ให้ลูกค้าสแกน
+      // 3. สร้าง URL สำหรับสั่งอาหาร
       const baseUrl = window.location.origin
       const customerOrderUrl = `${baseUrl}/order/${tableNum}?token=${newToken}`
       setQrUrl(customerOrderUrl)
