@@ -20,7 +20,6 @@ export default function CustomerOrderPage() {
   const [submitting, setSubmitting] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
 
-  // แมปไอคอนอีโมจิสำหรับหมวดหมู่ต่างๆ
   const getCategoryEmoji = (categoryName) => {
     if (!categoryName) return '🥢'
     const name = categoryName.toLowerCase()
@@ -64,7 +63,7 @@ export default function CustomerOrderPage() {
         setActiveCategory(catData[0].id)
       }
 
-      // 3. ดึงรายการเมนูจากตาราง menu_items
+      // 3. ดึงรายการเมนูจาก menu_items
       const { data: menuData } = await supabase
         .from('menu_items')
         .select('*')
@@ -108,43 +107,23 @@ export default function CustomerOrderPage() {
 
     setSubmitting(true)
 
-    // บันทึกออเดอร์ลงตาราง orders
-    const { data: order, error: orderError } = await supabase
+    // บันทึกออเดอร์ลงตาราง orders (ส่งรายการอาหารลงคอลัมน์ items)
+    const { error: orderError } = await supabase
       .from('orders')
       .insert([
         {
           table_number: Number(tableNumber),
           session_id: sessionData.id,
+          items: cartItems, // บันทึกข้อมูลลงคอลัมน์ items (jsonb)
           status: 'pending'
         }
       ])
-      .select()
-      .single()
 
     if (orderError) {
       alert('เกิดข้อผิดพลาดในการส่งออเดอร์: ' + orderError.message)
-      setSubmitting(false)
-      return
-    }
-
-    // บันทึกรายการลงตาราง order_items
-    const orderItemsPayload = cartItems.map((item) => ({
-      order_id: order.id,
-      menu_id: item.menu_id,
-      menu_name: item.menu_name,
-      price: item.price,
-      quantity: item.quantity
-    }))
-
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItemsPayload)
-
-    if (!itemsError) {
+    } else {
       setOrderSuccess(true)
       setCart({})
-    } else {
-      alert('เกิดข้อผิดพลาดในการบันทึกรายการอาหาร')
     }
 
     setSubmitting(false)
@@ -176,7 +155,6 @@ export default function CustomerOrderPage() {
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <header style={styles.header}>
         <div>
           <h1 style={styles.headerTitle}>Oden-Bokki</h1>
@@ -185,7 +163,6 @@ export default function CustomerOrderPage() {
         <div style={styles.tableBadge}>โต๊ะ {tableNumber}</div>
       </header>
 
-      {/* แถบหมวดหมู่เมนู (Category Tabs) */}
       {categories.length > 0 && (
         <div style={styles.categoryBar}>
           {categories.map((cat) => {
@@ -210,7 +187,6 @@ export default function CustomerOrderPage() {
         </div>
       )}
 
-      {/* แจ้งเตือนเมื่อสั่งสำเร็จ */}
       {orderSuccess && (
         <div style={styles.successAlert}>
           <span>🎉 ส่งออเดอร์เข้าครัวเรียบร้อยแล้วครับ!</span>
@@ -218,7 +194,6 @@ export default function CustomerOrderPage() {
         </div>
       )}
 
-      {/* รายการเมนูตามหมวดหมู่ */}
       <main style={styles.menuList}>
         {filteredMenus.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#999', marginTop: '40px' }}>ไม่มีรายการอาหารในหมวดนี้</p>
@@ -262,7 +237,6 @@ export default function CustomerOrderPage() {
         )}
       </main>
 
-      {/* ปุ่มกดส่งออเดอร์ด้านล่าง */}
       {totalCartCount > 0 && (
         <div style={styles.bottomBar}>
           <button
