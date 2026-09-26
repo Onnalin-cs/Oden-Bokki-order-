@@ -1,3 +1,5 @@
+import './globals.css'
+
 export const metadata = {
   title: 'Oden-Bokki',
   description: 'ระบบสั่งอาหารร้าน Oden-Bokki',
