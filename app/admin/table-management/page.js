@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '../../lib/supabaseClient' // ปรับ path ตามโครงสร้างโฟลเดอร์ของคุณ
+import { supabase } from '../../../lib/supabaseClient'
 
 export default function GenerateQRPage() {
   const [tableNumber, setTableNumber] = useState('')
@@ -32,7 +32,7 @@ export default function GenerateQRPage() {
         console.error('Check session error:', checkError)
       }
 
-      // 🔴 ถ้าเจอว่าโต๊ะนี้ยังไม่ปิด Session -> ให้แจ้งเตือนและหยุดทันที
+      // ถ้าเจอว่าโต๊ะนี้ยังไม่ปิด Session -> ให้แจ้งเตือนและหยุดทันที
       if (existingSession) {
         alert(`⚠️ โต๊ะ ${tableNum} กำลังมีลูกค้าใช้งานอยู่! กรุณาปิดโต๊ะเดิมก่อนเปิดใหม่ครับ`)
         setLoading(false)
