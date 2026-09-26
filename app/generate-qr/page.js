@@ -9,6 +9,7 @@ export default function GenerateQRPage() {
   const [childCount, setChildCount] = useState('')
   const [loading, setLoading] = useState(false)
   const [createdSession, setCreatedSession] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const adultPrice = 219
   const childPrice = 109
@@ -48,98 +49,138 @@ export default function GenerateQRPage() {
     return `${window.location.origin}/order/${createdSession.table_number}?token=${createdSession.token}`
   }
 
+  const handleCopyLink = () => {
+    const url = getOrderUrl()
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleReset = () => {
+    setCreatedSession(null)
+    setTableNumber('')
+    setAdultCount('')
+    setChildCount('')
+  }
+
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.titleRow}>
-          <span style={{ fontSize: '1.8rem' }}>📱</span>
-          <h1 style={styles.title}>เปิดโต๊ะลูกค้า</h1>
-        </div>
-        <p style={styles.subtitle}>Oden-Bokki — โอเด้งบ็อกกี</p>
-      </div>
-
       {!createdSession ? (
-        <div style={styles.card}>
-          <form onSubmit={handleOpenTable} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>เลขโต๊ะ</label>
-              <input
-                type="number"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                placeholder="เช่น 12"
-                required
-                style={styles.input}
+        <>
+          <div style={styles.header}>
+            <div style={styles.titleRow}>
+              <span style={{ fontSize: '1.8rem' }}>📱</span>
+              <h1 style={styles.title}>เปิดโต๊ะลูกค้า</h1>
+            </div>
+            <p style={styles.subtitle}>Oden-Bokki — โอเด้งบ็อกกี</p>
+          </div>
+
+          <div style={styles.card}>
+            <form onSubmit={handleOpenTable} style={styles.form}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>เลขโต๊ะ</label>
+                <input
+                  type="number"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value)}
+                  placeholder="เช่น 12"
+                  required
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.row}>
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>🧑‍🤝‍🧑 ผู้ใหญ่</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={adultCount}
+                    onChange={(e) => setAdultCount(e.target.value)}
+                    placeholder="0"
+                    style={{ ...styles.input, textAlign: 'center' }}
+                  />
+                  <span style={styles.subText}>คนละ 219 บาท</span>
+                </div>
+
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>👶 เด็ก</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={childCount}
+                    onChange={(e) => setChildCount(e.target.value)}
+                    placeholder="0"
+                    style={{ ...styles.input, textAlign: 'center' }}
+                  />
+                  <span style={styles.subText}>คนละ 109 บาท</span>
+                </div>
+              </div>
+
+              <div style={styles.estimateBox}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>💵</span>
+                  <span>ยอดประเมิน</span>
+                </div>
+                <span style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
+                  {totalAmount.toLocaleString()} บาท
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ ...styles.submitButton, opacity: loading ? 0.7 : 1 }}
+              >
+                <span style={{ fontSize: '1.1rem' }}>🧾</span>
+                {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
+              </button>
+            </form>
+          </div>
+        </>
+      ) : (
+        /* UI แบบเดิมจากรูป IMG_0879.jpg */
+        <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={styles.resultCard}>
+            <div style={styles.successBadge}>
+              ✓ เปิดโต๊ะสำเร็จ
+            </div>
+
+            <div style={styles.qrBox}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(getOrderUrl())}`}
+                alt={`QR Code โต๊ะ ${createdSession.table_number}`}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
               />
             </div>
 
-            <div style={styles.row}>
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>🧑‍🤝‍🧑 ผู้ใหญ่</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={adultCount}
-                  onChange={(e) => setAdultCount(e.target.value)}
-                  placeholder="0"
-                  style={{ ...styles.input, textAlign: 'center' }}
-                />
-                <span style={styles.subText}>คนละ 219 บาท</span>
+            <div style={styles.summaryCard}>
+              <h2 style={styles.tableTitle}>โต๊ะ {createdSession.table_number}</h2>
+              <div style={styles.peopleCount}>
+                <span>🧑‍🤝‍🧑 ผู้ใหญ่ {createdSession.adult_count} คน</span>
+                <span>👶 เด็ก {createdSession.child_count} คน</span>
               </div>
-
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>👶 เด็ก</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={childCount}
-                  onChange={(e) => setChildCount(e.target.value)}
-                  placeholder="0"
-                  style={{ ...styles.input, textAlign: 'center' }}
-                />
-                <span style={styles.subText}>คนละ 109 บาท</span>
+              <div style={styles.totalPriceText}>
+                ยอดรวม <strong style={{ color: '#C85A32', fontSize: '1.2rem' }}>
+                  {((createdSession.adult_count * adultPrice) + (createdSession.child_count * childPrice)).toLocaleString()} บาท
+                </strong>
               </div>
             </div>
 
-            <div style={styles.estimateBox}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>💵</span>
-                <span>ยอดประเมิน</span>
-              </div>
-              <span style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
-                {totalAmount.toLocaleString()} บาท
-              </span>
-            </div>
+            <p style={styles.urlText}>{getOrderUrl()}</p>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ ...styles.submitButton, opacity: loading ? 0.7 : 1 }}
-            >
-              <span style={{ fontSize: '1.1rem' }}>🧾</span>
-              {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
+          <div style={styles.actionRow}>
+            <button onClick={handleCopyLink} style={styles.actionBtn}>
+              📋 {copied ? 'คัดลอกแล้ว!' : 'คัดลอกลิงก์'}
             </button>
-          </form>
-        </div>
-      ) : (
-        <div style={{ ...styles.card, textAlign: 'center' }}>
-          <h2 style={{ color: '#C85A32', marginTop: 0 }}>โต๊ะ {createdSession.table_number} เปิดเรียบร้อย!</h2>
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(getOrderUrl())}`}
-            alt="QR Code"
-            style={{ margin: '16px 0', borderRadius: '12px' }}
-          />
-          <p style={{ color: '#666', fontSize: '0.9rem', wordBreak: 'break-all' }}>{getOrderUrl()}</p>
-          <button
-            onClick={() => {
-              setCreatedSession(null)
-              setTableNumber('')
-              setAdultCount('')
-              setChildCount('')
-            }}
-            style={{ ...styles.submitButton, marginTop: '16px' }}
-          >
-            เปิดโต๊ะถัดไป
+            <button onClick={() => window.print()} style={styles.actionBtn}>
+              🖨️ พิมพ์ QR Code
+            </button>
+          </div>
+
+          <button onClick={handleReset} style={styles.nextTableBtn}>
+            เปิดโต๊ะถัดไป →
           </button>
         </div>
       )}
@@ -250,5 +291,100 @@ const styles = {
     justifyContent: 'center',
     gap: '8px',
     width: '100%'
+  },
+  /* สไตล์ผลลัพธ์ตามรูป IMG_0879.jpg */
+  resultCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: '24px',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
+    boxSizing: 'border-box'
+  },
+  successBadge: {
+    backgroundColor: '#E6F7ED',
+    color: '#10B981',
+    padding: '6px 16px',
+    borderRadius: '20px',
+    fontSize: '0.9rem',
+    fontWeight: 'bold',
+    marginBottom: '20px'
+  },
+  qrBox: {
+    width: '100%',
+    maxWidth: '240px',
+    padding: '12px',
+    borderRadius: '16px',
+    border: '1px solid #F0F0F0',
+    marginBottom: '20px'
+  },
+  summaryCard: {
+    backgroundColor: '#FAF5EF',
+    borderRadius: '16px',
+    padding: '16px',
+    width: '100%',
+    textAlign: 'center',
+    boxSizing: 'border-box',
+    marginBottom: '12px'
+  },
+  tableTitle: {
+    margin: '0 0 8px 0',
+    fontSize: '1.4rem',
+    fontWeight: 'bold',
+    color: '#2C2C2C'
+  },
+  peopleCount: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '16px',
+    color: '#666',
+    fontSize: '0.9rem',
+    marginBottom: '12px'
+  },
+  totalPriceText: {
+    fontSize: '0.95rem',
+    color: '#666'
+  },
+  urlText: {
+    fontSize: '0.75rem',
+    color: '#CCC',
+    margin: 0,
+    wordBreak: 'break-all',
+    textAlign: 'center'
+  },
+  actionRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+    width: '100%'
+  },
+  actionBtn: {
+    backgroundColor: '#FFFFFF',
+    color: '#333333',
+    border: 'none',
+    padding: '14px',
+    borderRadius: '16px',
+    fontSize: '0.95rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px'
+  },
+  nextTableBtn: {
+    backgroundColor: '#C85A32',
+    color: '#FFFFFF',
+    border: 'none',
+    padding: '16px',
+    borderRadius: '16px',
+    fontSize: '1rem',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    width: '100%',
+    boxShadow: '0 4px 12px rgba(200, 90, 50, 0.2)'
   }
 }
