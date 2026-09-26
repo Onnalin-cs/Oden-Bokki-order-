@@ -1,269 +1,155 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabaseClient' // ปรับ path ตามโครงสร้างของคุณ
 
-export default function KitchenPage() {
+export default function KitchenDashboard() {
   const [orders, setOrders] = useState([])
-  const [soundEnabled, setSoundEnabled] = useState(false)
-  const audioCtxRef = useRef(null)
+  const [loading, setLoading] = useState(true)
 
-  // ฟังก์ชันเล่นเสียงแจ้งเตือน (Beep) ผ่าน Web Audio API
-  const playNotificationSound = () => {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new AudioContext()
-      }
-      const ctx = audioCtxRef.current
-      if (ctx.state === 'suspended') {
-        ctx.resume()
-      }
-
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(880, ctx.currentTime) // เสียงความถี่ 880Hz (A5)
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start()
-      osc.stop(ctx.currentTime + 0.5)
-    } catch (e) {
-      console.error('Audio play error:', e)
-    }
-  }
-
-  // เปิด/ปิด การใช้งานเสียง
-  const toggleSound = () => {
-    if (!soundEnabled) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext
-      audioCtxRef.current = new AudioContext()
-      playNotificationSound() // ทดสอบเล่น 1 ครั้งตอนเปิด
-    }
-    setSoundEnabled(!soundEnabled)
-  }
-
-  // ดึงข้อมูลออเดอร์แรกเริ่ม
-  const fetchPendingOrders = async () => {
+  // 1. ฟังก์ชันดึงรายการออเดอร์จาก Supabase
+  const fetchOrders = async () => {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
-      .eq('status', 'pending')
+      .select('*')
+      .eq('status', 'pending') // ดึงเฉพาะออเดอร์ที่รอดำเนินการ
       .order('created_at', { ascending: true })
 
-    if (!error && data) {
-      setOrders(data)
+    if (error) {
+      console.error('Error fetching orders:', error)
+    } else {
+      setOrders(data || [])
     }
+    setLoading(false)
   }
 
   useEffect(() => {
-    fetchPendingOrders()
+    fetchOrders()
 
-    // เปิด Realtime ฟังคำสั่งซื้อใหม่
-    const channel = supabase
-      .channel('kitchen_orders')
+    // 2. ระบบ Realtime - พอมีออเดอร์ส่งเข้ามาปุ๊บ หน้าจอจะเด้งทันทีโดยไม่ต้องกดรีเฟรช
+    const subscription = supabase
+      .channel('orders-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'orders' },
-        (payload) => {
-          fetchPendingOrders()
-          if (soundEnabled) {
-            playNotificationSound()
-          }
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          fetchOrders() // ดึงข้อมูลใหม่ทันทีเมื่อมีการ Insert หรือ Update
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(subscription)
     }
-  }, [soundEnabled])
+  }, [])
 
-  // อัปเดตสถานะออเดอร์ (เช่น ทำเสร็จแล้ว)
-  const handleUpdateStatus = async (orderId, newStatus) => {
+  // 3. ฟังก์ชันอัปเดตสถานะเมื่อทำอาหารเสร็จแล้ว
+  const handleCompleteOrder = async (orderId) => {
     const { error } = await supabase
       .from('orders')
-      .update({ status: newStatus })
+      .update({ status: 'completed' })
       .eq('id', orderId)
 
     if (!error) {
-      setOrders(orders.filter(o => o.id !== orderId))
+      // เอาออเดอร์ที่เสร็จแล้วออกจากหน้าจอครัว
+      setOrders((prev) => prev.filter((o) => o.id !== orderId))
+    } else {
+      alert('เกิดข้อผิดพลาดในการอัปเดตสถานะ: ' + error.message)
     }
+  }
+
+  if (loading) {
+    return (
+      <div style={styles.center}>
+        <p>กำลังโหลดข้อมูลออเดอร์...</p>
+      </div>
+    )
   }
 
   return (
     <div style={styles.container}>
-      {/* Top Header */}
       <header style={styles.header}>
-        <div style={styles.brandGroup}>
-          <div style={styles.logoIcon}>🧑‍🍳</div>
-          <div>
-            <h1 style={styles.title}>Oden-Bokki Kitchen</h1>
-            <p style={styles.subtitle}>หน้าจอควบคุมครัว</p>
-          </div>
-        </div>
-
-        <div style={styles.headerActions}>
-          <div style={styles.badgeCount}>
-            <span>♨️</span>
-            <span>{orders.length} ออเดอร์รอดำเนินการ</span>
-          </div>
-
-          <button
-            onClick={toggleSound}
-            style={{
-              ...styles.soundBtn,
-              backgroundColor: soundEnabled ? '#2D1B11' : '#1F1F1F',
-              color: soundEnabled ? '#E07A5F' : '#888888',
-              borderColor: soundEnabled ? '#E07A5F' : '#333333'
-            }}
-          >
-            <span>{soundEnabled ? '🔊' : '🔇'}</span>
-            <span>{soundEnabled ? 'เปิดเสียงแจ้งเตือนแล้ว' : 'ปิดเสียงอยู่'}</span>
-          </button>
-        </div>
+        <h1>👨‍🍳 หน้าจอห้องครัว (Kitchen Dashboard)</h1>
+        <p>จำนวนออเดอร์ที่รอทำ: {orders.length} รายการ</p>
       </header>
 
-      {/* Content Area */}
-      <main style={styles.mainContent}>
-        {orders.length === 0 ? (
-          <div style={styles.emptyState}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🍲</div>
-            <p style={{ fontSize: '1.2rem', margin: 0 }}>ยังไม่มีออเดอร์เข้ามา 🍳</p>
-          </div>
-        ) : (
-          <div style={styles.grid}>
-            {orders.map((order) => (
-              <div key={order.id} style={styles.orderCard}>
-                <div style={styles.cardHeader}>
-                  <h3 style={{ margin: 0, fontSize: '1.3rem' }}>โต๊ะ {order.table_number}</h3>
-                  <span style={styles.timeText}>
-                    {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
+      {orders.length === 0 ? (
+        <div style={styles.emptyState}>
+          <h2>🍳 ยังไม่มีออเดอร์เข้ามาในขณะนี้</h2>
+          <p>เมื่อลูกค้าสั่งอาหาร รายการจะแสดงขึ้นที่นี่อัตโนมัติ</p>
+        </div>
+      ) : (
+        <div style={styles.grid}>
+          {orders.map((order) => (
+            <div key={order.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <span style={styles.tableBadge}>โต๊ะ {order.table_number}</span>
+                <span style={styles.timeText}>
+                  {new Date(order.created_at).toLocaleTimeString('th-TH', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </div>
 
-                <div style={styles.itemList}>
-                  {order.order_items?.map((item, idx) => (
+              <div style={styles.itemList}>
+                {/* อ่านรายการอาหารจากคอลัมน์ items */}
+                {Array.isArray(order.items) &&
+                  order.items.map((item, idx) => (
                     <div key={idx} style={styles.itemRow}>
-                      <span style={{ fontWeight: 'bold' }}>{item.menu_name}</span>
-                      <span style={styles.qtyBadge}>x{item.quantity}</span>
+                      <span style={styles.itemName}>• {item.menu_name}</span>
+                      <span style={styles.itemQty}>x{item.quantity}</span>
                     </div>
                   ))}
-                </div>
-
-                <button
-                  onClick={() => handleUpdateStatus(order.id, 'completed')}
-                  style={styles.completeBtn}
-                >
-                  ✓ ทำเสร็จแล้ว
-                </button>
               </div>
-            ))}
-          </div>
-        )}
-      </main>
+
+              <button
+                onClick={() => handleCompleteOrder(order.id)}
+                style={styles.doneBtn}
+              >
+                ✅ ทำเสร็จแล้ว / พร้อมเสิร์ฟ
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 const styles = {
   container: {
-    backgroundColor: '#171717',
-    color: '#FFFFFF',
+    padding: '24px',
+    backgroundColor: '#FAF5EF',
     minHeight: '100vh',
-    fontFamily: 'system-ui, -apple-system, sans-serif'
+    fontFamily: 'sans-serif'
+  },
+  center: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh'
   },
   header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 24px',
-    borderBottom: '1px solid #282828',
-    backgroundColor: '#121212'
-  },
-  brandGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  logoIcon: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '50%',
-    backgroundColor: '#C85A32',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '1.4rem'
-  },
-  title: {
-    fontSize: '1.3rem',
-    fontWeight: 'bold',
-    margin: 0,
-    color: '#FFFFFF'
-  },
-  subtitle: {
-    fontSize: '0.85rem',
-    color: '#777777',
-    margin: '2px 0 0 0'
-  },
-  headerActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  badgeCount: {
-    backgroundColor: '#242424',
-    padding: '8px 16px',
-    borderRadius: '20px',
-    fontSize: '0.9rem',
-    color: '#D4D4D4',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    border: '1px solid #333333'
-  },
-  soundBtn: {
-    padding: '8px 16px',
-    borderRadius: '20px',
-    fontSize: '0.9rem',
-    border: '1px solid',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontWeight: '600',
-    transition: 'all 0.2s ease'
-  },
-  mainContent: {
-    padding: '32px 24px',
-    display: 'flex',
-    justifyContent: 'center'
+    marginBottom: '24px',
+    borderBottom: '2px solid #EAEAEA',
+    paddingBottom: '12px'
   },
   emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: '120px',
-    color: '#666666'
+    textAlign: 'center',
+    marginTop: '60px',
+    color: '#888'
   },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '20px',
-    width: '100%'
+    gap: '16px'
   },
-  orderCard: {
-    backgroundColor: '#222222',
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid #333333',
+    padding: '16px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'space-between'
@@ -272,42 +158,50 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #333333'
+    marginBottom: '12px',
+    paddingBottom: '8px',
+    borderBottom: '1px dashed #EEE'
+  },
+  tableBadge: {
+    backgroundColor: '#C85A32',
+    color: '#FFF',
+    padding: '4px 12px',
+    borderRadius: '12px',
+    fontWeight: 'bold',
+    fontSize: '1.1rem'
   },
   timeText: {
-    color: '#888888',
+    color: '#888',
     fontSize: '0.85rem'
   },
   itemList: {
-    margin: '16px 0',
+    margin: '12px 0',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px'
+    gap: '8px'
   },
   itemRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '1rem'
+    fontSize: '1rem',
+    color: '#333'
   },
-  qtyBadge: {
-    backgroundColor: '#C85A32',
-    color: '#FFFFFF',
-    padding: '2px 8px',
-    borderRadius: '8px',
-    fontSize: '0.85rem',
-    fontWeight: 'bold'
+  itemName: {
+    fontWeight: '500'
   },
-  completeBtn: {
-    backgroundColor: '#2E7D32',
-    color: '#FFFFFF',
+  itemQty: {
+    fontWeight: 'bold',
+    color: '#C85A32'
+  },
+  doneBtn: {
+    backgroundColor: '#10B981',
+    color: '#FFF',
     border: 'none',
-    padding: '12px',
-    borderRadius: '12px',
+    padding: '10px',
+    borderRadius: '10px',
     fontWeight: 'bold',
     cursor: 'pointer',
-    width: '100%',
-    fontSize: '0.95rem'
+    marginTop: '12px',
+    width: '100%'
   }
 }
