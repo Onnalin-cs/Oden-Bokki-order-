@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase } from '../../lib/supabaseClient'
 
 export default function GenerateQRPage() {
   const [tableNumber, setTableNumber] = useState('')
@@ -18,7 +18,6 @@ export default function GenerateQRPage() {
     setLoading(true)
     const token = crypto.randomUUID()
 
-    // บันทึก Session ลง Supabase
     const { data, error } = await supabase
       .from('sessions')
       .insert([
@@ -36,7 +35,6 @@ export default function GenerateQRPage() {
     if (error) {
       alert('เกิดข้อผิดพลาด: ' + error.message)
     } else {
-      // สร้าง URL สำหรับ QR Code
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
       const url = `${origin}/order/${tableNumber}?token=${token}`
       setQrUrl(url)
