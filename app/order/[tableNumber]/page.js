@@ -20,6 +20,11 @@ export default function CustomerOrderPage() {
   const [submitting, setSubmitting] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
 
+  // โมดอลเช็กบิล
+  const [showBillModal, setShowBillModal] = useState(false)
+  const [selectedPayment, setSelectedPayment] = useState('qr')
+  const [checkoutRequested, setCheckoutRequested] = useState(false)
+
   const getCategoryEmoji = (categoryName) => {
     if (!categoryName) return '🥢'
     const name = categoryName.toLowerCase()
@@ -50,6 +55,9 @@ export default function CustomerOrderPage() {
 
       if (!sessionError && session) {
         setSessionData(session)
+        if (session.requested_checkout) {
+          setCheckoutRequested(true)
+        }
       }
 
       // 2. ดึงหมวดหมู่ทั้งหมด
@@ -107,14 +115,13 @@ export default function CustomerOrderPage() {
 
     setSubmitting(true)
 
-    // บันทึกออเดอร์ลงตาราง orders (ส่งรายการอาหารลงคอลัมน์ items)
     const { error: orderError } = await supabase
       .from('orders')
       .insert([
         {
           table_number: Number(tableNumber),
           session_id: sessionData.id,
-          items: cartItems, // บันทึกข้อมูลลงคอลัมน์ items (jsonb)
+          items: cartItems,
           status: 'pending'
         }
       ])
@@ -126,6 +133,28 @@ export default function CustomerOrderPage() {
       setCart({})
     }
 
+    setSubmitting(false)
+  }
+
+  // ฟังก์ชันส่งสัญญาณเรียกเช็กบิล
+  const handleRequestCheckout = async () => {
+    if (!sessionData) return
+
+    setSubmitting(true)
+    const { error } = await supabase
+      .from('sessions')
+      .update({
+        requested_checkout: true,
+        payment_method: selectedPayment
+      })
+      .eq('id', sessionData.id)
+
+    if (!error) {
+      setCheckoutRequested(true)
+      setShowBillModal(false)
+    } else {
+      alert('เกิดข้อผิดพลาดในการเรียกเก็บเงิน: ' + error.message)
+    }
     setSubmitting(false)
   }
 
@@ -155,14 +184,28 @@ export default function CustomerOrderPage() {
 
   return (
     <div style={styles.container}>
+      {/* Header */}
       <header style={styles.header}>
         <div>
           <h1 style={styles.headerTitle}>Oden-Bokki</h1>
-          <p style={styles.headerSub}>โอเด้งบ็อกกี</p>
+          <p style={styles.headerSub}>โต๊ะ {tableNumber}</p>
         </div>
-        <div style={styles.tableBadge}>โต๊ะ {tableNumber}</div>
+        <button
+          onClick={() => setShowBillModal(true)}
+          style={styles.callBillBtn}
+        >
+          💳 เรียกเช็กบิล
+        </button>
       </header>
 
+      {/* แจ้งเตือนเมื่อเรียกเช็กบิลแล้ว */}
+      {checkoutRequested && (
+        <div style={styles.checkoutAlert}>
+          🔔 แจ้งเรียกพนักงานมาเช็กบิลแล้วครับ กรุณารอพนักงานสักครู่...
+        </div>
+      )}
+
+      {/* Categories Bar */}
       {categories.length > 0 && (
         <div style={styles.categoryBar}>
           {categories.map((cat) => {
@@ -187,6 +230,7 @@ export default function CustomerOrderPage() {
         </div>
       )}
 
+      {/* Order Success Alert */}
       {orderSuccess && (
         <div style={styles.successAlert}>
           <span>🎉 ส่งออเดอร์เข้าครัวเรียบร้อยแล้วครับ!</span>
@@ -194,6 +238,7 @@ export default function CustomerOrderPage() {
         </div>
       )}
 
+      {/* Menu List */}
       <main style={styles.menuList}>
         {filteredMenus.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#999', marginTop: '40px' }}>ไม่มีรายการอาหารในหมวดนี้</p>
@@ -237,6 +282,7 @@ export default function CustomerOrderPage() {
         )}
       </main>
 
+      {/* Bottom Cart Bar */}
       {totalCartCount > 0 && (
         <div style={styles.bottomBar}>
           <button
@@ -246,6 +292,64 @@ export default function CustomerOrderPage() {
           >
             {submitting ? 'กำลังส่งออเดอร์...' : `🛒 ส่งออเดอร์เข้าครัว (${totalCartCount} รายการ)`}
           </button>
+        </div>
+      )}
+
+      {/* Modal ป๊อปอัปเลือกชำระเงิน */}
+      {showBillModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <h3 style={{ margin: '0 0 12px 0' }}>💳 เรียกพนักงานเช็กบิล</h3>
+            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '16px' }}>
+              กรุณาเลือกช่องทางการชำระเงินที่คุณสะดวก:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <label style={{
+                ...styles.paymentOption,
+                borderColor: selectedPayment === 'qr' ? '#C85A32' : '#DDD',
+                backgroundColor: selectedPayment === 'qr' ? '#FAF5EF' : '#FFF'
+              }}>
+                <input
+                  type="radio"
+                  name="payment"
+                  checked={selectedPayment === 'qr'}
+                  onChange={() => setSelectedPayment('qr')}
+                />
+                <span>📱 สแกน QR Code / โอนเงิน</span>
+              </label>
+
+              <label style={{
+                ...styles.paymentOption,
+                borderColor: selectedPayment === 'cash' ? '#C85A32' : '#DDD',
+                backgroundColor: selectedPayment === 'cash' ? '#FAF5EF' : '#FFF'
+              }}>
+                <input
+                  type="radio"
+                  name="payment"
+                  checked={selectedPayment === 'cash'}
+                  onChange={() => setSelectedPayment('cash')}
+                />
+                <span>💵 เงินสด</span>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowBillModal(false)}
+                style={styles.cancelModalBtn}
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleRequestCheckout}
+                disabled={submitting}
+                style={styles.confirmModalBtn}
+              >
+                {submitting ? 'กำลังส่ง...' : 'ยืนยันเรียกพนักงาน'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -276,7 +380,7 @@ const styles = {
   },
   header: {
     backgroundColor: '#FFFFFF',
-    padding: '16px 20px',
+    padding: '12px 20px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -292,17 +396,30 @@ const styles = {
     margin: 0
   },
   headerSub: {
-    fontSize: '0.75rem',
-    color: '#AAA',
-    margin: 0
+    fontSize: '0.8rem',
+    color: '#666',
+    margin: 0,
+    fontWeight: 'bold'
   },
-  tableBadge: {
-    backgroundColor: '#C85A32',
-    color: '#FFFFFF',
-    padding: '6px 14px',
-    borderRadius: '20px',
+  callBillBtn: {
+    backgroundColor: '#10B981',
+    color: '#FFF',
+    border: 'none',
+    padding: '8px 14px',
+    borderRadius: '12px',
     fontWeight: 'bold',
-    fontSize: '0.9rem'
+    fontSize: '0.85rem',
+    cursor: 'pointer'
+  },
+  checkoutAlert: {
+    backgroundColor: '#FEF3C7',
+    color: '#92400E',
+    padding: '12px 20px',
+    margin: '12px 16px 0 16px',
+    borderRadius: '14px',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    textAlign: 'center'
   },
   categoryBar: {
     display: 'flex',
@@ -311,7 +428,7 @@ const styles = {
     padding: '12px 16px',
     backgroundColor: '#FAF5EF',
     position: 'sticky',
-    top: '61px',
+    top: '57px',
     zIndex: 9,
     scrollbarWidth: 'none'
   },
@@ -325,8 +442,7 @@ const styles = {
     fontSize: '0.9rem',
     whiteSpace: 'nowrap',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+    transition: 'all 0.2s ease'
   },
   successAlert: {
     backgroundColor: '#E6F7ED',
@@ -451,7 +567,57 @@ const styles = {
     fontWeight: 'bold',
     cursor: 'pointer',
     width: '100%',
-    maxWidth: '500px',
-    boxShadow: '0 4px 12px rgba(200, 90, 50, 0.25)'
+    maxWidth: '500px'
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    padding: '20px'
+  },
+  modalCard: {
+    backgroundColor: '#FFF',
+    padding: '20px',
+    borderRadius: '20px',
+    width: '100%',
+    maxWidth: '360px',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+  },
+  paymentOption: {
+    border: '2px solid',
+    padding: '12px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '0.95rem'
+  },
+  cancelModalBtn: {
+    flex: 1,
+    padding: '10px',
+    border: '1px solid #DDD',
+    backgroundColor: '#FFF',
+    borderRadius: '10px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  confirmModalBtn: {
+    flex: 1,
+    padding: '10px',
+    border: 'none',
+    backgroundColor: '#10B981',
+    color: '#FFF',
+    borderRadius: '10px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
   }
 }
