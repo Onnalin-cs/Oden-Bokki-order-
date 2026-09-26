@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase } from '../../lib/supabaseClient'
 
 export default function KitchenPage() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // ดึงออเดอร์
   useEffect(() => {
     async function fetchOrders() {
       const { data, error } = await supabase
@@ -34,7 +33,6 @@ export default function KitchenPage() {
       padding: '24px',
       boxSizing: 'border-box'
     }}>
-      {/* Header */}
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -64,7 +62,6 @@ export default function KitchenPage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main style={{ width: '100%' }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: '#888', padding: '60px' }}>กำลังโหลดข้อมูลออเดอร์...</div>
@@ -87,7 +84,6 @@ export default function KitchenPage() {
             gap: '20px',
             width: '100%'
           }}>
-            {/* รายการ Card ออเดอร์จะแสดงตรงนี้ */}
             {orders.map((order) => (
               <div key={order.id} style={{
                 backgroundColor: '#2A2A2A',
