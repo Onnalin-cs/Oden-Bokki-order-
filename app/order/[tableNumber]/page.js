@@ -25,7 +25,7 @@ export default function CustomerOrderPage() {
         return
       }
 
-      // 1. ตรวจสอบว่าโต๊ะและ token นี้เปิดใช้งานอยู่จริงหรือไม่ (ไม่ต้องล็อกอิน)
+      // 1. ตรวจสอบ Session จาก token
       const { data: session, error: sessionError } = await supabase
         .from('sessions')
         .select('*')
@@ -34,15 +34,13 @@ export default function CustomerOrderPage() {
         .eq('status', 'open')
         .single()
 
-      if (sessionError || !session) {
-        setSessionData(null)
-      } else {
+      if (!sessionError && session) {
         setSessionData(session)
       }
 
-      // 2. ดึงรายการเมนูอาหาร
-      const { data: menuData } = await supabase
-        .from('menus')
+      // 2. ดึงรายการเมนูจากตาราง menu_items
+      const { data: menuData, error: menuError } = await supabase
+        .from('menu_items')
         .select('*')
         .order('id', { ascending: true })
 
@@ -56,7 +54,6 @@ export default function CustomerOrderPage() {
     initPage()
   }, [tableNumber, token])
 
-  // เพิ่ม/ลด จำนวนสินค้าในตะกร้า
   const updateQuantity = (menuId, change) => {
     setCart((prev) => {
       const currentQty = prev[menuId] || 0
@@ -70,7 +67,6 @@ export default function CustomerOrderPage() {
     })
   }
 
-  // ส่งออเดอร์เข้าห้องครัว
   const handleSubmitOrder = async () => {
     const cartItems = Object.keys(cart).map((menuId) => {
       const menu = menus.find((m) => m.id === Number(menuId))
@@ -82,13 +78,11 @@ export default function CustomerOrderPage() {
       }
     })
 
-    if (cartItems.length === 0) {
-      return alert('กรุณาเลือกรายการอาหารก่อนสั่งครับ')
-    }
+    if (cartItems.length === 0) return alert('กรุณาเลือกรายการอาหารก่อนส่งครับ')
 
     setSubmitting(true)
 
-    // บันทึกออเดอร์หลัก
+    // บันทึกออเดอร์ลงตาราง orders
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([
@@ -107,7 +101,7 @@ export default function CustomerOrderPage() {
       return
     }
 
-    // บันทึกรายการอาหารในออเดอร์
+    // บันทึกรายการลงตาราง order_items
     const orderItemsPayload = cartItems.map((item) => ({
       order_id: order.id,
       menu_id: item.menu_id,
@@ -120,11 +114,11 @@ export default function CustomerOrderPage() {
       .from('order_items')
       .insert(orderItemsPayload)
 
-    if (itemsError) {
-      alert('เกิดข้อผิดพลาดในการบันทึกรายการอาหาร')
-    } else {
+    if (!itemsError) {
       setOrderSuccess(true)
       setCart({})
+    } else {
+      alert('เกิดข้อผิดพลาดในการบันทึกรายการอาหาร')
     }
 
     setSubmitting(false)
@@ -133,18 +127,17 @@ export default function CustomerOrderPage() {
   if (loading) {
     return (
       <div style={styles.centerContainer}>
-        <p>กำลังโหลดข้อมูล...</p>
+        <p>กำลังโหลดเมนูอาหาร...</p>
       </div>
     )
   }
 
-  // กรณี QR Code ไม่ถูกต้อง หรือปิดโต๊ะไปแล้ว
   if (!sessionData) {
     return (
       <div style={styles.centerContainer}>
         <div style={styles.errorCard}>
           <h2>⚠️ ไม่พบข้อมูลโต๊ะอาหาร</h2>
-          <p>ลิงก์สั่งอาหารนี้ไม่ถูกต้อง หรือโต๊ะนี้ถูกปิดไปแล้วครับ</p>
+          <p>กรุณาสแกน QR Code ใหม่ หรือติดต่อพนักงานครับ</p>
         </div>
       </div>
     )
@@ -154,21 +147,18 @@ export default function CustomerOrderPage() {
 
   return (
     <div style={styles.container}>
-      {/* Header โต๊ะ */}
       <header style={styles.header}>
         <h1 style={styles.headerTitle}>Oden-Bokki</h1>
         <div style={styles.tableBadge}>โต๊ะ {tableNumber}</div>
       </header>
 
-      {/* แจ้งเตือนเมื่อสั่งสำเร็จ */}
       {orderSuccess && (
         <div style={styles.successAlert}>
-          🎉 ส่งออเดอร์เรียบร้อยแล้ว! ห้องครัวกำลังเตรียมอาหารให้ครับ
+          🎉 ส่งออเดอร์เข้าครัวเรียบร้อยแล้วครับ!
           <button onClick={() => setOrderSuccess(false)} style={styles.closeAlertBtn}>✕</button>
         </div>
       )}
 
-      {/* เมนูอาหาร */}
       <main style={styles.menuList}>
         {menus.map((menu) => (
           <div key={menu.id} style={styles.menuCard}>
@@ -178,7 +168,7 @@ export default function CustomerOrderPage() {
             <div style={styles.menuInfo}>
               <h3 style={styles.menuName}>{menu.name}</h3>
               <p style={styles.menuPrice}>
-                {menu.price > 0 ? `${menu.price} บาท` : 'รวมอยู่ในบุฟเฟต์'}
+                {menu.price > 0 ? `${menu.price} บาท` : 'บุฟเฟต์'}
               </p>
             </div>
             <div style={styles.qtyControl}>
@@ -198,7 +188,6 @@ export default function CustomerOrderPage() {
         ))}
       </main>
 
-      {/* แถบกดสั่งอาหารด้านล่าง */}
       {totalCartCount > 0 && (
         <div style={styles.bottomBar}>
           <button
