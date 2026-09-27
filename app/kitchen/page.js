@@ -7,15 +7,37 @@ export default function KitchenPage() {
   const [orders, setOrders] = useState([])
   const [newOrderToast, setNewOrderToast] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [audioEnabled, setAudioEnabled] = useState(false)
+  const audioCtxRef = useRef(null)
 
-  // ฟังก์ชันสร้างเสียงกระดิ่งครัวอัตโนมัติด้วย Web Audio API (ไม่ต้องใช้ไฟล์ .mp3)
-  const playKitchenBell = () => {
+  // 1. ฟังก์ชันกระตุ้นระบบเสียง (ต้องทำผ่านการคลิกของผู้ใช้ 1 ครั้ง)
+  const enableAudio = () => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext
-      if (!AudioContext) return
-      const ctx = new AudioContext()
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext()
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume()
+      }
+      setAudioEnabled(true)
+      // เล่นเสียงทดสอบสั้นๆ ให้รู้ว่าเปิดเสียงสำเร็จแล้ว
+      playKitchenBell()
+    } catch (e) {
+      console.log('Audio error:', e)
+    }
+  }
 
-      // โน้ตเสียงกระดิ่ง 2 ช็อต (Ding-Dong)
+  // 2. ฟังก์ชันเล่นเสียงกระดิ่งครัว (Ding-Dong)
+  const playKitchenBell = () => {
+    try {
+      if (!audioCtxRef.current) return
+      const ctx = audioCtxRef.current
+
+      if (ctx.state === 'suspended') {
+        ctx.resume()
+      }
+
       const playNote = (freq, startTime, duration) => {
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
@@ -33,14 +55,14 @@ export default function KitchenPage() {
       }
 
       const now = ctx.currentTime
-      playNote(880, now, 0.6)        // เสียงสูง
-      playNote(1174.66, now + 0.15, 0.8) // เสียงกระดิ่งใสกังวาน
+      playNote(880, now, 0.6)         // เสียงกระดิ่งช็อตที่ 1
+      playNote(1174.66, now + 0.15, 0.8) // เสียงกระดิ่งช็อตที่ 2
     } catch (e) {
       console.log('Audio playback error:', e)
     }
   }
 
-  // ดึงรายการออเดอร์ที่ยังไม่ได้เสิร์ฟ (status: pending หรือ cooking)
+  // ดึงรายการออเดอร์ที่ยังไม่ได้เสิร์ฟ
   const fetchActiveOrders = async () => {
     const { data, error } = await supabase
       .from('orders')
@@ -66,14 +88,13 @@ export default function KitchenPage() {
         (payload) => {
           const newOrder = payload.new
 
-          // 1. เล่นเสียงกระดิ่งทันที
+          // เล่นเสียงกระดิ่งเตือน
           playKitchenBell()
 
-          // 2. แสดง Toast ป๊อปอัปแจ้งเตือนออเดอร์ใหม่
+          // แสดง Toast ป๊อปอัปแจ้งเตือนออเดอร์ใหม่
           setNewOrderToast(`🔔 ออเดอร์ใหม่! โต๊ะ ${newOrder.table_number || 'ไม่ระบุ'}`)
           setTimeout(() => setNewOrderToast(null), 5000)
 
-          // 3. โหลดออเดอร์ใหม่ขึ้นจอ
           fetchActiveOrders()
         }
       )
@@ -91,7 +112,7 @@ export default function KitchenPage() {
     }
   }, [])
 
-  // ฟังก์ชันอัปเดตสถานะออเดอร์ (pending -> cooking -> served)
+  // ฟังก์ชันอัปเดตสถานะออเดอร์
   const handleUpdateStatus = async (orderId, newStatus) => {
     const { error } = await supabase
       .from('orders')
@@ -105,7 +126,6 @@ export default function KitchenPage() {
     }
   }
 
-  // คำนวณเวลาที่ผ่านไปเป็นนาที
   const getMinutesElapsed = (createdAt) => {
     const start = new Date(createdAt).getTime()
     const now = new Date().getTime()
@@ -128,12 +148,26 @@ export default function KitchenPage() {
           <h1 style={styles.title}>👨‍🍳 Oden-Bokki Kitchen Display (KDS)</h1>
           <p style={styles.subTitle}>ระบบจัดการรายการอาหารในครัวแบบ Realtime</p>
         </div>
-        <div style={styles.orderBadge}>
-          รอประกอบอาหาร: {orders.length} รายการ
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* ปุ่มเปิดเสียงเพื่อปลุก Autoplay ของเบราว์เซอร์ */}
+          <button
+            onClick={enableAudio}
+            style={{
+              ...styles.audioBtn,
+              backgroundColor: audioEnabled ? '#10B981' : '#EF4444'
+            }}
+          >
+            {audioEnabled ? '🔔 เปิดเสียงเรียบร้อย' : '🔊 กดเปิดเสียงแจ้งเตือน'}
+          </button>
+
+          <div style={styles.orderBadge}>
+            รอประกอบอาหาร: {orders.length} รายการ
+          </div>
         </div>
       </header>
 
-      {/* 🔔 ป๊อปอัป Toast แจ้งเตือน Realtime (ไฮไลต์ความว้าว) */}
+      {/* 🔔 ป๊อปอัป Toast แจ้งเตือน Realtime */}
       {newOrderToast && (
         <div style={styles.toastNotification}>
           <span style={{ fontSize: '1.8rem' }}>🔔</span>
@@ -153,7 +187,7 @@ export default function KitchenPage() {
         ) : (
           orders.map((order) => {
             const minutes = getMinutesElapsed(order.created_at)
-            const isLate = minutes >= 10 // ถ้านานเกิน 10 นาที การ์ดจะเปลี่ยนเป็นเตือนสีแดง
+            const isLate = minutes >= 10
 
             return (
               <div
@@ -164,7 +198,6 @@ export default function KitchenPage() {
                   backgroundColor: isLate ? '#1F1213' : '#1E293B'
                 }}
               >
-                {/* Card Header */}
                 <div style={styles.cardHeader}>
                   <div style={styles.tableNumber}>โต๊ะ {order.table_number}</div>
                   <div style={{
@@ -179,7 +212,6 @@ export default function KitchenPage() {
                   สั่งเมื่อ: {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
                 </div>
 
-                {/* Items List */}
                 <div style={styles.itemList}>
                   {Array.isArray(order.items) &&
                     order.items.map((item, idx) => (
@@ -190,7 +222,6 @@ export default function KitchenPage() {
                     ))}
                 </div>
 
-                {/* Action Buttons */}
                 <div style={styles.cardActions}>
                   {order.status === 'pending' ? (
                     <button
@@ -252,12 +283,22 @@ const styles = {
     color: '#94A3B8',
     margin: '4px 0 0 0'
   },
+  audioBtn: {
+    color: '#FFF',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '12px',
+    fontWeight: 'bold',
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
   orderBadge: {
     backgroundColor: '#334155',
     padding: '8px 16px',
-    borderRadius: '20px',
+    borderRadius: '12px',
     fontWeight: 'bold',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     color: '#F8FAFC'
   },
   toastNotification: {
@@ -272,8 +313,7 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     boxShadow: '0 10px 25px rgba(245, 158, 11, 0.4)',
-    zIndex: 999,
-    animation: 'bounce 0.5s infinite alternate'
+    zIndex: 999
   },
   gridContainer: {
     display: 'grid',
